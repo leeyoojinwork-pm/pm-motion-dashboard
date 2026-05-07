@@ -1102,6 +1102,7 @@ function classify(lm) {
 
   if (n === 0 && !thumb) return 'fist';
   if (n >= 3)            return 'palm';
+  if (n === 2 && ext[0] && ext[1]) return 'peace';
 
   const dx = lm[4].x - lm[8].x;
   const dy = lm[4].y - lm[8].y;
@@ -1177,6 +1178,7 @@ function onResults(results) {
   if (g === 'fist')  { showGesture('Fist', true);  fireOnce('fist',  toggleFocus); }
   else if (g === 'palm')  { showGesture('Open palm', true); fireOnce('palm',  openBoard); }
   else if (g === 'pinch') { showGesture('Pinch', true);     fireOnce('pinch', expandFirst); }
+  else if (g === 'peace') { showGesture('Peace ✌', true);    fireOnce('peace', addTaskPrompt); }
   else                    { showGesture('Hand detected', false); }
 }
 

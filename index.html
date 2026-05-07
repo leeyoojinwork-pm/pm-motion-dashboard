@@ -1,0 +1,1259 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>PM Motion Dashboard</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;450;500;600&display=swap" rel="stylesheet" />
+
+<!-- MediaPipe Hand Tracking -->
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js" crossorigin="anonymous"></script>
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js" crossorigin="anonymous"></script>
+
+<style>
+/* ─────────────────────────────────────────────
+   TOKENS
+───────────────────────────────────────────── */
+:root {
+  /* Backgrounds */
+  --bg:           #0c0f16;
+  --bg-panel:     #101420;
+  --bg-card:      #111624;
+  --bg-card-hi:   #141928;
+
+  /* Borders */
+  --line:         #1b2030;
+  --line-hi:      #252d40;
+
+  /* Text */
+  --t1:  #dde1ea;
+  --t2:  #545c72;
+  --t3:  #2c3245;
+
+  /* Single accent */
+  --blue:         #5b8ef0;
+  --blue-muted:   rgba(91,142,240,0.10);
+  --blue-line:    rgba(91,142,240,0.35);
+
+  /* Priority colors — kept subtle */
+  --c-urgent:     #e05d6f;
+  --c-important:  #b07de0;
+  --c-later:      var(--blue);
+
+  --font: 'Inter', -apple-system, sans-serif;
+  --ease: cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+/* ─────────────────────────────────────────────
+   RESET
+───────────────────────────────────────────── */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html, body {
+  width: 100%; height: 100%;
+  overflow: hidden;
+  background: var(--bg);
+  color: var(--t1);
+  font-family: var(--font);
+  font-size: 13px;
+  -webkit-font-smoothing: antialiased;
+  font-feature-settings: "ss01", "cv01";
+}
+button { font-family: inherit; cursor: pointer; border: none; background: none; }
+
+/* ─────────────────────────────────────────────
+   LAYOUT
+───────────────────────────────────────────── */
+#app {
+  display: grid;
+  /* main column fills space; sidebar fixed width */
+  grid-template-columns: 1fr 220px;
+  grid-template-rows: 52px 1fr;
+  height: 100vh;
+  width: 100vw;
+}
+
+/* ─────────────────────────────────────────────
+   TOPBAR
+───────────────────────────────────────────── */
+#topbar {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 32px;
+  border-bottom: 1px solid var(--line);
+}
+
+.tb-brand {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+}
+
+.tb-title {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--t1);
+}
+
+.tb-sep {
+  width: 1px;
+  height: 10px;
+  background: var(--line-hi);
+  flex-shrink: 0;
+}
+
+.tb-sub {
+  font-size: 11px;
+  font-weight: 400;
+  color: var(--t2);
+  letter-spacing: 0.06em;
+}
+
+.tb-right {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+}
+
+.tb-date {
+  font-size: 11px;
+  color: var(--t2);
+  letter-spacing: 0.04em;
+}
+
+/* Tracking indicator */
+.tb-tracking {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.track-dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--t3);
+  transition: background 0.4s ease;
+  flex-shrink: 0;
+}
+.track-dot.live {
+  background: var(--blue);
+  animation: pulse-dot 2.4s ease-in-out infinite;
+}
+.track-dot.err { background: var(--c-urgent); }
+
+@keyframes pulse-dot {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0.35; }
+}
+
+.track-label {
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  color: var(--t2);
+}
+
+/* ─────────────────────────────────────────────
+   MAIN — cards area
+───────────────────────────────────────────── */
+#main {
+  padding: 36px 40px 36px 40px;
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  overflow: hidden;
+  border-right: 1px solid var(--line);
+}
+
+/* Section label above cards */
+.board-label {
+  font-size: 10px;
+  font-weight: 500;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--t2);
+  margin-bottom: 24px;
+}
+
+/* ─────────────────────────────────────────────
+   TASK CARDS
+───────────────────────────────────────────── */
+#card-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;          /* razor-thin gap — editorial list feel */
+  flex: 1;
+  overflow: hidden;
+}
+
+/* Closed state: cards invisible */
+#card-list.closed .task-card {
+  opacity: 0;
+  transform: translateY(8px);
+  pointer-events: none;
+}
+#card-list.closed .board-empty {
+  display: flex;
+}
+
+.board-empty {
+  display: none;
+  flex: 1;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  color: var(--t3);
+}
+
+.empty-icon {
+  font-size: 22px;
+  opacity: 0.5;
+}
+
+.empty-text {
+  font-size: 12px;
+  color: var(--t2);
+  letter-spacing: 0.04em;
+}
+
+.empty-keys {
+  font-size: 10px;
+  color: var(--t3);
+  letter-spacing: 0.08em;
+}
+
+/* THE CARD */
+.task-card {
+  position: relative;
+  background: var(--bg-card);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 22px 24px;
+  cursor: pointer;
+  transition:
+    background    0.2s ease,
+    border-color  0.2s ease,
+    opacity       0.35s var(--ease),
+    transform     0.35s var(--ease),
+    max-height    0.4s  var(--ease);
+  max-height: 88px;
+  overflow: hidden;
+}
+
+/* Left priority rule — the only visual accent */
+.task-card::before {
+  content: '';
+  position: absolute;
+  left: 0; top: 16px; bottom: 16px;
+  width: 2px;
+  border-radius: 0 2px 2px 0;
+  background: transparent;
+  transition: background 0.2s ease, opacity 0.2s ease;
+}
+
+.task-card[data-col="urgent"]::before    { background: var(--c-urgent); }
+.task-card[data-col="important"]::before { background: var(--c-important); }
+.task-card[data-col="later"]::before     { background: var(--c-later); }
+
+/* Hover */
+.task-card:hover {
+  background: var(--bg-card-hi);
+  border-color: var(--line-hi);
+}
+
+/* Selected */
+.task-card.selected {
+  background: var(--bg-card-hi);
+  border-color: var(--line-hi);
+}
+
+/* Expanded */
+.task-card.expanded {
+  max-height: 200px;
+}
+
+/* Done */
+.task-card.done {
+  opacity: 0.3;
+}
+.task-card.done .c-name {
+  text-decoration: line-through;
+  color: var(--t2);
+}
+
+/* Card enter animation */
+@keyframes cardEnter {
+  from { opacity: 0; transform: translateY(10px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.task-card.entering {
+  animation: cardEnter 0.4s var(--ease) both;
+}
+
+/* Card inner layout */
+.c-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.c-left {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+/* Priority dot */
+.c-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+[data-col="urgent"]    .c-dot { background: var(--c-urgent); }
+[data-col="important"] .c-dot { background: var(--c-important); }
+[data-col="later"]     .c-dot { background: var(--c-later); }
+
+.c-col-label {
+  font-size: 10px;
+  font-weight: 500;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--t2);
+}
+
+.c-tag {
+  font-size: 10px;
+  color: var(--t3);
+  letter-spacing: 0.08em;
+}
+
+/* Task name — the hero element */
+.c-name {
+  font-size: 18px;
+  font-weight: 450;
+  color: var(--t1);
+  letter-spacing: -0.01em;
+  line-height: 1;
+  margin-top: 12px;
+}
+
+/* Expanded detail */
+.c-detail {
+  overflow: hidden;
+  max-height: 0;
+  opacity: 0;
+  transition: max-height 0.4s var(--ease), opacity 0.25s ease;
+}
+.task-card.expanded .c-detail {
+  max-height: 100px;
+  opacity: 1;
+}
+
+.c-detail-inner {
+  margin-top: 14px;
+  padding-top: 14px;
+  border-top: 1px solid var(--line);
+}
+
+.c-desc {
+  font-size: 12px;
+  color: var(--t2);
+  line-height: 1.7;
+  margin-bottom: 12px;
+}
+
+.c-actions {
+  display: flex;
+  gap: 6px;
+}
+
+.c-btn {
+  font-size: 10px;
+  font-weight: 500;
+  letter-spacing: 0.06em;
+  color: var(--t2);
+  padding: 4px 10px;
+  border: 1px solid var(--line-hi);
+  border-radius: 4px;
+  transition: color 0.15s, border-color 0.15s, background 0.15s;
+}
+.c-btn:hover {
+  color: var(--blue);
+  border-color: var(--blue-line);
+  background: var(--blue-muted);
+}
+.c-btn.done-btn:hover {
+  color: var(--c-urgent);
+  border-color: rgba(224,93,111,0.35);
+  background: rgba(224,93,111,0.08);
+}
+
+/* ─────────────────────────────────────────────
+   SIDEBAR
+───────────────────────────────────────────── */
+#sidebar {
+  padding: 28px 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  overflow: hidden;
+}
+
+/* Sidebar section */
+.s-section {
+  padding: 18px 0;
+  border-bottom: 1px solid var(--line);
+}
+.s-section:first-child { padding-top: 0; }
+.s-section:last-child  { border-bottom: none; padding-bottom: 0; }
+
+.s-section-label {
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--t3);
+  margin-bottom: 14px;
+}
+
+/* Status rows */
+.s-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 10px;
+}
+.s-row:last-child { margin-bottom: 0; }
+
+.s-key {
+  font-size: 11px;
+  color: var(--t2);
+  font-weight: 400;
+}
+
+.s-val {
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--t2);
+  letter-spacing: 0.04em;
+}
+.s-val.on     { color: var(--blue); }
+.s-val.locked { color: var(--c-important); }
+
+/* Energy bar */
+.s-bar-wrap {
+  margin-top: 6px;
+  height: 2px;
+  background: var(--line);
+  border-radius: 2px;
+  overflow: hidden;
+}
+.s-bar-fill {
+  height: 100%;
+  width: 72%;
+  background: var(--blue);
+  border-radius: 2px;
+  opacity: 0.5;
+}
+
+/* Gesture readout */
+#gesture-display {
+  font-size: 12px;
+  color: var(--t2);
+  font-weight: 400;
+  min-height: 18px;
+  transition: color 0.2s ease;
+}
+#gesture-display.active {
+  color: var(--blue);
+}
+
+/* Keyboard hint */
+.kb-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  margin-top: 14px;
+}
+
+kbd {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 22px;
+  height: 20px;
+  padding: 0 5px;
+  font-family: var(--font);
+  font-size: 9px;
+  font-weight: 500;
+  color: var(--t2);
+  background: var(--bg-card);
+  border: 1px solid var(--line-hi);
+  border-radius: 3px;
+  letter-spacing: 0.04em;
+}
+
+/* ─────────────────────────────────────────────
+   WEBCAM — discreet bottom section of sidebar
+───────────────────────────────────────────── */
+.cam-section {
+  margin-top: auto;
+  padding-top: 20px;
+  border-top: 1px solid var(--line);
+}
+
+.cam-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  margin-bottom: 10px;
+}
+
+.cam-toggle-label {
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--t3);
+}
+
+.cam-toggle-btn {
+  font-size: 9px;
+  font-weight: 500;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--t2);
+  padding: 2px 7px;
+  border: 1px solid var(--line-hi);
+  border-radius: 3px;
+  transition: color 0.15s, border-color 0.15s;
+}
+.cam-toggle-btn:hover {
+  color: var(--t1);
+  border-color: var(--line-hi);
+}
+
+#cam-wrap {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 4/3;
+  border-radius: 5px;
+  overflow: hidden;
+  background: var(--bg-panel);
+  border: 1px solid var(--line);
+  transition: opacity 0.3s ease, max-height 0.35s var(--ease);
+  max-height: 200px;
+}
+#cam-wrap.hidden {
+  opacity: 0;
+  max-height: 0;
+  border-color: transparent;
+  pointer-events: none;
+}
+
+#webcam {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  transform: scaleX(-1);
+  display: block;
+  opacity: 0.85;
+}
+
+#hand-canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  transform: scaleX(-1);
+}
+
+/* ─────────────────────────────────────────────
+   FOCUS MODE
+───────────────────────────────────────────── */
+#focus-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 300;
+  background: rgba(8, 10, 15, 0.88);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.5s var(--ease);
+}
+#focus-overlay.active {
+  opacity: 1;
+  pointer-events: all;
+}
+
+.fo-eyebrow {
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.26em;
+  text-transform: uppercase;
+  color: var(--blue);
+  opacity: 0.7;
+}
+
+.fo-headline {
+  font-size: 36px;
+  font-weight: 300;
+  letter-spacing: -0.02em;
+  color: var(--t1);
+  line-height: 1;
+}
+
+.fo-rule {
+  width: 28px;
+  height: 1px;
+  background: var(--line-hi);
+  margin: 6px 0;
+}
+
+#focus-timer {
+  font-size: 18px;
+  font-weight: 300;
+  letter-spacing: 0.22em;
+  color: var(--t2);
+}
+
+.fo-hint {
+  font-size: 10px;
+  color: var(--t3);
+  letter-spacing: 0.12em;
+  margin-top: 4px;
+}
+
+/* ─────────────────────────────────────────────
+   TOAST
+───────────────────────────────────────────── */
+#toast {
+  position: fixed;
+  top: 68px;
+  left: 50%;
+  transform: translateX(-50%) translateY(-6px);
+  background: var(--bg-panel);
+  border: 1px solid var(--line-hi);
+  border-radius: 20px;
+  padding: 6px 16px;
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--t1);
+  letter-spacing: 0.04em;
+  z-index: 400;
+  pointer-events: none;
+  opacity: 0;
+  white-space: nowrap;
+  transition: opacity 0.2s ease, transform 0.2s var(--ease);
+}
+#toast.show {
+  opacity: 1;
+  transform: translateX(-50%) translateY(0);
+}
+</style>
+</head>
+<body>
+
+<div id="app">
+
+  <!-- ── TOP BAR ────────────────────────── -->
+  <header id="topbar">
+    <div class="tb-brand">
+      <span class="tb-title">PM Motion Dashboard</span>
+      <div class="tb-sep"></div>
+      <span class="tb-sub">Today Board</span>
+    </div>
+    <div class="tb-right">
+      <span class="tb-date" id="tb-date"></span>
+      <button id="add-task-btn" onclick="addTaskPrompt()" style="background:var(--blue-muted);border:1px solid var(--blue-line);color:var(--blue);padding:5px 12px;border-radius:14px;font-size:11px;font-weight:500;letter-spacing:0.04em;cursor:pointer;">+ Add</button>
+      <div class="tb-tracking">
+        <div class="track-dot" id="track-dot"></div>
+        <span class="track-label" id="track-label">Standby</span>
+      </div>
+    </div>
+  </header>
+
+  <!-- ── MAIN — CARDS ──────────────────── -->
+  <main id="main">
+    <div class="board-label" id="board-label">3 priorities</div>
+
+    <div id="card-list" class="closed">
+
+      <!-- Empty state when board is closed -->
+      <div class="board-empty">
+        <div class="empty-icon">◻</div>
+        <div class="empty-text">Open palm to reveal your board</div>
+        <div class="empty-keys">or press O</div>
+      </div>
+
+      <!-- Cards injected by JS -->
+    </div>
+  </main>
+
+  <!-- ── SIDEBAR ───────────────────────── -->
+  <aside id="sidebar">
+
+    <!-- Status -->
+    <div class="s-section">
+      <div class="s-section-label">Status</div>
+
+      <div class="s-row">
+        <span class="s-key">Focus mode</span>
+        <span class="s-val" id="s-focus">Off</span>
+      </div>
+      <div class="s-row">
+        <span class="s-key">Priority lock</span>
+        <span class="s-val" id="s-lock">Ready</span>
+      </div>
+      <div class="s-row" style="flex-direction:column; align-items:flex-start; gap:7px;">
+        <div style="display:flex; width:100%; justify-content:space-between;">
+          <span class="s-key">Energy</span>
+          <span class="s-val" id="s-energy">72%</span>
+        </div>
+        <div class="s-bar-wrap" style="width:100%;">
+          <div class="s-bar-fill"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Gesture -->
+    <div class="s-section">
+      <div class="s-section-label">Gesture</div>
+      <div id="gesture-display">Waiting…</div>
+
+      <div class="kb-row">
+        <kbd>O</kbd>
+        <kbd>F</kbd>
+        <kbd>P</kbd>
+        <kbd>C</kbd>
+        <kbd>←</kbd>
+        <kbd>→</kbd>
+      </div>
+    </div>
+
+    <!-- Webcam -->
+    <div class="cam-section">
+      <div class="cam-toggle">
+        <span class="cam-toggle-label">Camera</span>
+        <button class="cam-toggle-btn" id="cam-toggle-btn" onclick="toggleCam()">Hide</button>
+      </div>
+      <div id="cam-wrap">
+        <video id="webcam" autoplay muted playsinline></video>
+        <canvas id="hand-canvas"></canvas>
+      </div>
+    </div>
+
+  </aside>
+
+</div><!-- /#app -->
+
+<!-- FOCUS OVERLAY -->
+<div id="focus-overlay">
+  <div class="fo-eyebrow">Deep work session</div>
+  <div class="fo-headline">Focus mode</div>
+  <div class="fo-rule"></div>
+  <div id="focus-timer">00:00</div>
+  <div class="fo-hint">Fist again to exit · press F</div>
+</div>
+
+<!-- TOAST -->
+<div id="toast"></div>
+
+
+<!-- ════════════════════════════════════════
+     JAVASCRIPT
+════════════════════════════════════════ -->
+<script>
+/* ─────────────────────────────────────────
+   DATA — only 3 tasks (one per priority)
+───────────────────────────────────────── */
+const TASKS = [
+  { id:1, name:'Morning Reset',  col:'urgent',    tag:'Routine', desc:'Journal 5 min · Hydrate · Set intention for the day' },
+  { id:2, name:'Deep Work 45m',  col:'important', tag:'Focus',   desc:'Product roadmap doc · Distraction-free · one clear deliverable' },
+  { id:3, name:'Edit & Upload',  col:'later',     tag:'Content', desc:'Final cut · captions · cover art · schedule post' },
+];
+
+const COL_LABEL = { urgent: 'Urgent', important: 'Important', later: 'Later' };
+const COLS      = ['urgent', 'important', 'later'];
+
+/* ─────────────────────────────────────────
+   STATE  (with localStorage persistence)
+───────────────────────────────────────── */
+const STORAGE_KEY = 'pm-motion-dashboard-v1';
+
+function loadTasks() {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (!raw) return TASKS.map(t => ({ ...t, done: false }));
+    const arr = JSON.parse(raw);
+    if (Array.isArray(arr) && arr.length) return arr;
+  } catch {}
+  return TASKS.map(t => ({ ...t, done: false }));
+}
+
+function saveTasks() {
+  try { localStorage.setItem(STORAGE_KEY, JSON.stringify(S.tasks)); } catch {}
+}
+
+const S = {
+  tasks:       loadTasks(),
+  boardOpen:   false,
+  focusMode:   false,
+  selectedId:  null,
+  expandedId:  null,
+  focusStart:  null,
+  focusTick:   null,
+  camVisible:  true,
+  nextId:      0,
+};
+S.nextId = S.tasks.reduce((m, t) => Math.max(m, t.id), 0) + 1;
+
+/* ─────────────────────────────────────────
+   ADD / DELETE
+───────────────────────────────────────── */
+function addTaskPrompt() {
+  const name = prompt('Task name?');
+  if (!name || !name.trim()) return;
+  const colInput = (prompt('Priority? (u = urgent, i = important, l = later)', 'i') || 'i').trim().toLowerCase()[0];
+  const col = colInput === 'u' ? 'urgent' : colInput === 'l' ? 'later' : 'important';
+  S.tasks.push({ id: S.nextId++, name: name.trim(), col, tag: 'New', desc: 'Click to add details.', done: false });
+  if (!S.boardOpen) S.boardOpen = true;
+  saveTasks();
+  toast(`Added: ${name.trim()}`);
+  render();
+}
+
+function deleteTask(id) {
+  const i = S.tasks.findIndex(t => t.id === id);
+  if (i < 0) return;
+  const [t] = S.tasks.splice(i, 1);
+  if (S.expandedId === id) { S.expandedId = null; S.selectedId = null; }
+  saveTasks();
+  toast(`Deleted: ${t.name}`);
+  render();
+}
+
+/* ─────────────────────────────────────────
+   DOM REFS
+───────────────────────────────────────── */
+const D = {
+  cardList:      document.getElementById('card-list'),
+  boardLabel:    document.getElementById('board-label'),
+  sFocus:        document.getElementById('s-focus'),
+  sLock:         document.getElementById('s-lock'),
+  focusOverlay:  document.getElementById('focus-overlay'),
+  focusTimer:    document.getElementById('focus-timer'),
+  gestureDisplay:document.getElementById('gesture-display'),
+  toast:         document.getElementById('toast'),
+  webcam:        document.getElementById('webcam'),
+  handCanvas:    document.getElementById('hand-canvas'),
+  trackDot:      document.getElementById('track-dot'),
+  trackLabel:    document.getElementById('track-label'),
+  tbDate:        document.getElementById('tb-date'),
+  camWrap:       document.getElementById('cam-wrap'),
+  camToggleBtn:  document.getElementById('cam-toggle-btn'),
+};
+
+/* ─────────────────────────────────────────
+   DATE
+───────────────────────────────────────── */
+function setDate() {
+  const d = new Date();
+  const days  = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
+  const months = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+  D.tbDate.textContent = `${days[d.getDay()]}, ${d.getDate()} ${months[d.getMonth()]}`;
+}
+setDate();
+
+/* ─────────────────────────────────────────
+   RENDER
+───────────────────────────────────────── */
+function render() {
+  // Remove existing cards
+  D.cardList.querySelectorAll('.task-card').forEach(el => el.remove());
+
+  S.tasks.forEach((task, i) => {
+    const card = buildCard(task, i);
+    if (S.boardOpen) {
+      card.classList.add('entering');
+      card.style.animationDelay = `${i * 70}ms`;
+    }
+    D.cardList.appendChild(card);
+  });
+
+  // Board open / closed class
+  D.cardList.classList.toggle('closed', !S.boardOpen);
+
+  // Board label
+  const activeTasks = S.tasks.filter(t => !t.done).length;
+  const doneTasks   = S.tasks.filter(t =>  t.done).length;
+  D.boardLabel.textContent = S.boardOpen
+    ? `${activeTasks} active · ${doneTasks} done`
+    : '—';
+
+  // Focus mode
+  D.focusOverlay.classList.toggle('active', S.focusMode);
+  D.sFocus.textContent  = S.focusMode ? 'On'  : 'Off';
+  D.sFocus.className    = 's-val' + (S.focusMode ? ' on' : '');
+  D.sLock.textContent   = S.focusMode ? 'Locked' : 'Ready';
+  D.sLock.className     = 's-val' + (S.focusMode ? ' locked' : '');
+}
+
+/* Build a card element */
+function buildCard(task) {
+  const el = document.createElement('div');
+  el.className = 'task-card'
+    + (task.id === S.selectedId ? ' selected' : '')
+    + (task.id === S.expandedId ? ' expanded' : '')
+    + (task.done ? ' done' : '');
+  el.dataset.col = task.col;
+  el.dataset.id  = task.id;
+
+  el.innerHTML = `
+    <div class="c-header">
+      <div class="c-left">
+        <div class="c-dot"></div>
+        <span class="c-col-label">${COL_LABEL[task.col]}</span>
+      </div>
+      <span class="c-tag">${task.tag}</span>
+    </div>
+    <div class="c-name">${task.name}</div>
+    <div class="c-detail">
+      <div class="c-detail-inner">
+        <div class="c-desc">${task.desc}</div>
+        <div class="c-actions">
+          <button class="c-btn done-btn" data-action="done"  data-id="${task.id}">
+            ${task.done ? 'Restore' : 'Mark done'}
+          </button>
+          <button class="c-btn" data-action="left"  data-id="${task.id}">← Move</button>
+          <button class="c-btn" data-action="right" data-id="${task.id}">Move →</button>
+          <button class="c-btn" data-action="delete" data-id="${task.id}" style="color:var(--c-urgent);">Delete</button>
+        </div>
+      </div>
+    </div>
+  `;
+
+  el.addEventListener('click', e => {
+    const btn = e.target.closest('[data-action]');
+    if (btn) {
+      e.stopPropagation();
+      const id = +btn.dataset.id;
+      if (btn.dataset.action === 'done')   return toggleDone(id);
+      if (btn.dataset.action === 'left')   return moveById(id, 'left');
+      if (btn.dataset.action === 'right')  return moveById(id, 'right');
+      if (btn.dataset.action === 'delete') return deleteTask(id);
+    }
+    toggleExpand(task.id);
+  });
+
+  return el;
+}
+
+/* ─────────────────────────────────────────
+   ACTIONS
+───────────────────────────────────────── */
+function openBoard() {
+  if (S.boardOpen) return;
+  S.boardOpen = true;
+  toast('Board open');
+  render();
+}
+
+function closeBoard() {
+  if (!S.boardOpen) return;
+  S.boardOpen = false;
+  toast('Board closed');
+  render();
+}
+
+function toggleBoard() { S.boardOpen ? closeBoard() : openBoard(); }
+
+function toggleFocus() {
+  S.focusMode = !S.focusMode;
+  if (S.focusMode) {
+    S.focusStart = Date.now();
+    S.focusTick  = setInterval(tickFocus, 1000);
+    toast('Focus mode on');
+  } else {
+    clearInterval(S.focusTick);
+    S.focusTick = null;
+    toast('Focus mode off');
+  }
+  render();
+}
+
+function tickFocus() {
+  if (!S.focusStart) return;
+  const s  = Math.floor((Date.now() - S.focusStart) / 1000);
+  const mm = String(Math.floor(s / 60)).padStart(2, '0');
+  const ss = String(s % 60).padStart(2, '0');
+  D.focusTimer.textContent = `${mm}:${ss}`;
+}
+
+function toggleExpand(id) {
+  if (S.expandedId === id) { S.expandedId = null; S.selectedId = null; }
+  else { S.expandedId = id; S.selectedId = id; }
+  render();
+}
+
+function expandFirst() {
+  const t = S.tasks.find(t => !t.done);
+  if (!t) return;
+  S.expandedId === t.id ? (S.expandedId = null, S.selectedId = null)
+                        : (S.expandedId = t.id,  S.selectedId = t.id);
+  render();
+  toast('Card expanded');
+}
+
+function toggleDone(id) {
+  const t = S.tasks.find(t => t.id === id);
+  if (!t) return;
+  t.done = !t.done;
+  toast(t.done ? `✓  ${t.name}` : 'Restored');
+  if (S.expandedId === id) { S.expandedId = null; S.selectedId = null; }
+  saveTasks();
+  render();
+}
+
+function completeSelected() {
+  const id = S.selectedId || (S.tasks.find(t => !t.done) || {}).id;
+  if (id) toggleDone(id);
+}
+
+function moveById(id, dir) {
+  const t  = S.tasks.find(t => t.id === id);
+  if (!t) return;
+  const ci = COLS.indexOf(t.col);
+  const ni = dir === 'left' ? Math.max(0, ci - 1) : Math.min(COLS.length - 1, ci + 1);
+  if (ni === ci) { toast('Already at edge'); return; }
+  t.col = COLS[ni];
+  toast(`Moved to ${COL_LABEL[t.col]}`);
+  saveTasks();
+  render();
+}
+
+function moveSelected(dir) {
+  const id = S.selectedId || (S.tasks.find(t => !t.done) || {}).id;
+  if (id) moveById(id, dir);
+}
+
+/* Camera toggle */
+function toggleCam() {
+  S.camVisible = !S.camVisible;
+  D.camWrap.classList.toggle('hidden', !S.camVisible);
+  D.camToggleBtn.textContent = S.camVisible ? 'Hide' : 'Show';
+}
+
+/* ─────────────────────────────────────────
+   TOAST
+───────────────────────────────────────── */
+let _toastTimer = null;
+function toast(msg) {
+  D.toast.textContent = msg;
+  D.toast.classList.add('show');
+  clearTimeout(_toastTimer);
+  _toastTimer = setTimeout(() => D.toast.classList.remove('show'), 1800);
+}
+
+/* ─────────────────────────────────────────
+   GESTURE DISPLAY
+───────────────────────────────────────── */
+function showGesture(label, active = false) {
+  D.gestureDisplay.textContent = label;
+  D.gestureDisplay.classList.toggle('active', active);
+}
+
+/* ─────────────────────────────────────────
+   HAND GESTURE ENGINE
+   MediaPipe landmark indices:
+   4=thumb tip, 8=index tip, 12=middle tip
+   6=index pip, 10=middle pip, 14=ring pip, 18=pinky pip
+───────────────────────────────────────── */
+const posHist = [];
+const HIST    = 14;
+let _cooling  = false;
+let _lastGest = null;
+const COOLDOWN = 800;
+
+function fingerUp(lm, tip, pip)  { return lm[tip].y < lm[pip].y; }
+function thumbOut(lm)            { return Math.abs(lm[4].x - lm[2].x) > 0.06; }
+
+function classify(lm) {
+  const ext = [
+    fingerUp(lm,  8, 6),
+    fingerUp(lm, 12, 10),
+    fingerUp(lm, 16, 14),
+    fingerUp(lm, 20, 18),
+  ];
+  const n     = ext.filter(Boolean).length;
+  const thumb = thumbOut(lm);
+
+  if (n === 0 && !thumb) return 'fist';
+  if (n >= 3)            return 'palm';
+
+  const dx = lm[4].x - lm[8].x;
+  const dy = lm[4].y - lm[8].y;
+  if (Math.sqrt(dx*dx + dy*dy) < 0.07 && n <= 1) return 'pinch';
+
+  return 'none';
+}
+
+function detectSwipe() {
+  if (posHist.length < 8) return null;
+  const f   = posHist[0];
+  const l   = posHist[posHist.length - 1];
+  const dx  = l.x - f.x, dy = l.y - f.y;
+  const adx = Math.abs(dx), ady = Math.abs(dy);
+  if (ady > 0.18 && ady > adx * 1.4 && dy > 0) return 'swipe_down';
+  if (adx > 0.19 && adx > ady * 1.4)           return dx > 0 ? 'swipe_right' : 'swipe_left';
+  return null;
+}
+
+function fireOnce(key, fn) {
+  if (_cooling || _lastGest === key) return;
+  _cooling  = true;
+  _lastGest = key;
+  fn();
+  setTimeout(() => { _cooling = false; _lastGest = null; }, COOLDOWN);
+}
+
+function onResults(results) {
+  const canvas = D.handCanvas;
+  const ctx    = canvas.getContext('2d');
+  canvas.width  = D.webcam.videoWidth  || 172;
+  canvas.height = D.webcam.videoHeight || 129;
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+  if (!results.multiHandLandmarks?.length) {
+    showGesture('No hand', false);
+    posHist.length = 0;
+    D.trackDot.classList.remove('live');
+    D.trackLabel.textContent = 'Watching';
+    return;
+  }
+
+  D.trackDot.classList.add('live');
+  D.trackLabel.textContent = 'Tracking';
+
+  const lm = results.multiHandLandmarks[0];
+
+  // Draw skeleton
+  if (window.drawConnectors && window.HAND_CONNECTIONS) {
+    drawConnectors(ctx, lm, HAND_CONNECTIONS, { color: 'rgba(91,142,240,0.4)', lineWidth: 1 });
+    drawLandmarks(ctx, lm, { color: 'rgba(91,142,240,0.7)', lineWidth: 0, radius: 1.5 });
+  }
+
+  posHist.push({ x: lm[0].x, y: lm[0].y });
+  if (posHist.length > HIST) posHist.shift();
+
+  const swipe = detectSwipe();
+  if (swipe && !_cooling) {
+    if (swipe === 'swipe_right') {
+      showGesture('Swipe right →', true);
+      fireOnce('swipe_right', () => { moveSelected('right'); posHist.length = 0; });
+    } else if (swipe === 'swipe_left') {
+      showGesture('← Swipe left', true);
+      fireOnce('swipe_left',  () => { moveSelected('left');  posHist.length = 0; });
+    } else if (swipe === 'swipe_down') {
+      showGesture('Swipe down ↓', true);
+      fireOnce('swipe_down',  () => { completeSelected();    posHist.length = 0; });
+    }
+    return;
+  }
+
+  const g = classify(lm);
+  if (g === 'fist')  { showGesture('Fist', true);  fireOnce('fist',  toggleFocus); }
+  else if (g === 'palm')  { showGesture('Open palm', true); fireOnce('palm',  openBoard); }
+  else if (g === 'pinch') { showGesture('Pinch', true);     fireOnce('pinch', expandFirst); }
+  else                    { showGesture('Hand detected', false); }
+}
+
+/* ─────────────────────────────────────────
+   CAMERA / MEDIAPIPE INIT
+───────────────────────────────────────── */
+async function initCamera() {
+  if (typeof Hands === 'undefined') {
+    D.trackLabel.textContent = 'No SDK';
+    D.trackDot.classList.add('err');
+    return;
+  }
+
+  const hands = new Hands({
+    locateFile: f => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${f}`
+  });
+
+  hands.setOptions({
+    maxNumHands:            1,
+    modelComplexity:        0,
+    minDetectionConfidence: 0.7,
+    minTrackingConfidence:  0.6,
+  });
+  hands.onResults(onResults);
+
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({
+      video: { width: 320, height: 240, facingMode: 'user' }
+    });
+    D.webcam.srcObject = stream;
+    await D.webcam.play();
+    D.trackLabel.textContent = 'Initialising';
+
+    if (typeof Camera !== 'undefined') {
+      new Camera(D.webcam, {
+        onFrame: async () => await hands.send({ image: D.webcam }),
+        width: 320, height: 240,
+      }).start();
+    } else {
+      const loop = async () => {
+        if (D.webcam.readyState >= 2) await hands.send({ image: D.webcam });
+        requestAnimationFrame(loop);
+      };
+      loop();
+    }
+
+    D.trackLabel.textContent = 'Live';
+  } catch (err) {
+    D.trackLabel.textContent = 'No camera';
+    D.trackDot.classList.add('err');
+  }
+}
+
+/* ─────────────────────────────────────────
+   KEYBOARD FALLBACK
+───────────────────────────────────────── */
+document.addEventListener('keydown', e => {
+  if (e.target.tagName === 'INPUT') return;
+  switch (e.key.toUpperCase()) {
+    case 'O':           toggleBoard();       break;
+    case 'F':           toggleFocus();       break;
+    case 'P':           expandFirst();       break;
+    case 'C':           completeSelected();  break;
+    case 'A':           addTaskPrompt();     break;
+    case 'ARROWLEFT':   e.preventDefault(); moveSelected('left');  break;
+    case 'ARROWRIGHT':  e.preventDefault(); moveSelected('right'); break;
+  }
+});
+
+/* ─────────────────────────────────────────
+   BOOT
+───────────────────────────────────────── */
+window.addEventListener('load', () => {
+  render();
+  initCamera();
+  setTimeout(() => toast('Press O to open your board'), 1000);
+});
+</script>
+</body>
+</html>

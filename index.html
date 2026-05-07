@@ -844,6 +844,8 @@ kbd {
         <kbd>F</kbd>
         <kbd>P</kbd>
         <kbd>C</kbd>
+        <kbd>A</kbd>
+        <kbd>N</kbd>
         <kbd>←</kbd>
         <kbd>→</kbd>
       </div>
@@ -1238,6 +1240,17 @@ function moveById(id, dir) {
   render();
 }
 
+function selectNext() {
+  if (!S.boardOpen) { openBoard(); return; }
+  const active = S.tasks.filter(t => !t.done);
+  if (!active.length) { toast('No active tasks'); return; }
+  const idx = active.findIndex(t => t.id === S.selectedId);
+  const next = active[(idx + 1) % active.length];
+  S.selectedId = next.id;
+  toast(`Selected: ${next.name}`);
+  render();
+}
+
 function moveSelected(dir) {
   const id = S.selectedId || (S.tasks.find(t => !t.done) || {}).id;
   if (id) moveById(id, dir);
@@ -1297,6 +1310,7 @@ function classify(lm) {
   if (n === 0 && !thumb) return 'fist';
   if (n >= 3)            return 'palm';
   if (n === 2 && ext[0] && ext[1]) return 'peace';
+  if (n === 1 && ext[0]) return 'point';
 
   const dx = lm[4].x - lm[8].x;
   const dy = lm[4].y - lm[8].y;
@@ -1312,6 +1326,7 @@ function detectSwipe() {
   const dx  = l.x - f.x, dy = l.y - f.y;
   const adx = Math.abs(dx), ady = Math.abs(dy);
   if (ady > 0.18 && ady > adx * 1.4 && dy > 0) return 'swipe_down';
+  if (ady > 0.18 && ady > adx * 1.4 && dy < 0) return 'swipe_up';
   if (adx > 0.19 && adx > ady * 1.4)           return dx > 0 ? 'swipe_right' : 'swipe_left';
   return null;
 }
@@ -1364,6 +1379,9 @@ function onResults(results) {
     } else if (swipe === 'swipe_down') {
       showGesture('Swipe down ↓', true);
       fireOnce('swipe_down',  () => { completeSelected();    posHist.length = 0; });
+    } else if (swipe === 'swipe_up') {
+      showGesture('Swipe up ↑', true);
+      fireOnce('swipe_up',    () => { closeBoard();          posHist.length = 0; });
     }
     return;
   }
@@ -1373,6 +1391,7 @@ function onResults(results) {
   else if (g === 'palm')  { showGesture('Open palm', true); fireOnce('palm',  openBoard); }
   else if (g === 'pinch') { showGesture('Pinch', true);     fireOnce('pinch', expandFirst); }
   else if (g === 'peace') { showGesture('Peace ✌', true);    fireOnce('peace', addTaskPrompt); }
+  else if (g === 'point') { showGesture('Point ☝', true);    fireOnce('point', selectNext); }
   else                    { showGesture('Hand detected', false); }
 }
 
@@ -1440,6 +1459,7 @@ document.addEventListener('keydown', e => {
     case 'P':           expandFirst();       break;
     case 'C':           completeSelected();  break;
     case 'A':           addTaskPrompt();     break;
+    case 'N':           selectNext();        break;
     case 'ARROWLEFT':   e.preventDefault(); moveSelected('left');  break;
     case 'ARROWRIGHT':  e.preventDefault(); moveSelected('right'); break;
   }

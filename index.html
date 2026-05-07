@@ -662,6 +662,112 @@ kbd {
   opacity: 1;
   transform: translateX(-50%) translateY(0);
 }
+
+/* ─────────────────────────────────────────────
+   ADD TASK MODAL
+───────────────────────────────────────────── */
+.modal-overlay {
+  position: fixed; inset: 0;
+  background: rgba(8,10,15,0.72);
+  backdrop-filter: blur(8px);
+  display: none;
+  align-items: center; justify-content: center;
+  z-index: 500;
+  animation: fadeIn 0.18s ease;
+}
+.modal-overlay.show { display: flex; }
+@keyframes fadeIn { from { opacity:0; } to { opacity:1; } }
+
+.modal-card {
+  width: 440px; max-width: calc(100vw - 32px);
+  background: var(--bg-panel);
+  border: 1px solid var(--line-hi);
+  border-radius: 14px;
+  padding: 22px 24px 18px;
+  box-shadow: 0 20px 60px rgba(0,0,0,0.55);
+  animation: cardIn 0.22s var(--ease);
+}
+@keyframes cardIn { from { opacity:0; transform:translateY(8px) scale(0.98);} to { opacity:1; transform:none;} }
+
+.modal-eyebrow {
+  font-size: 9px; font-weight: 600;
+  letter-spacing: 0.26em; text-transform: uppercase;
+  color: var(--blue); opacity: 0.75;
+}
+.modal-title {
+  font-size: 18px; font-weight: 400;
+  color: var(--t1); margin-top: 4px; margin-bottom: 14px;
+  letter-spacing: -0.01em;
+}
+
+.modal-templates {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 6px;
+}
+.mt-tile {
+  background: var(--bg-card);
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  padding: 9px 6px;
+  text-align: center;
+  cursor: pointer;
+  transition: all 0.15s var(--ease);
+}
+.mt-tile:hover { border-color: var(--blue-line); background: var(--bg-card-hi); }
+.mt-tile.active { border-color: var(--blue); background: var(--blue-muted); }
+.mt-emoji { font-size: 18px; line-height: 1; margin-bottom: 4px; }
+.mt-label { font-size: 10px; color: var(--t1); letter-spacing: 0.04em; }
+
+.modal-divider {
+  height: 1px; background: var(--line);
+  margin: 16px 0 14px;
+}
+
+.modal-form { display: flex; flex-direction: column; gap: 6px; }
+.modal-label {
+  font-size: 9px; font-weight: 600;
+  letter-spacing: 0.18em; text-transform: uppercase;
+  color: var(--t2); margin-top: 6px;
+}
+.modal-input {
+  background: var(--bg-card); color: var(--t1);
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  padding: 8px 10px;
+  font-family: inherit; font-size: 12px;
+  outline: none;
+  transition: border-color 0.15s ease;
+  resize: vertical;
+}
+.modal-input:focus { border-color: var(--blue-line); }
+
+.modal-priority { display: flex; gap: 6px; }
+.mp-btn {
+  flex: 1; background: var(--bg-card);
+  border: 1px solid var(--line); border-radius: 7px;
+  padding: 7px 8px; color: var(--t2);
+  font-size: 11px; letter-spacing: 0.04em;
+  font-family: inherit;
+  transition: all 0.15s ease;
+}
+.mp-btn:hover { color: var(--t1); border-color: var(--line-hi); }
+.mp-btn.active { background: var(--blue-muted); border-color: var(--blue); color: var(--blue); }
+
+.modal-actions {
+  display: flex; justify-content: flex-end;
+  gap: 8px; margin-top: 18px;
+}
+.modal-btn {
+  padding: 8px 16px; border-radius: 8px;
+  font-family: inherit; font-size: 11px; font-weight: 500;
+  letter-spacing: 0.04em;
+  transition: all 0.15s ease;
+}
+.modal-btn.ghost { background: transparent; color: var(--t2); border: 1px solid var(--line); }
+.modal-btn.ghost:hover { color: var(--t1); border-color: var(--line-hi); }
+.modal-btn.primary { background: var(--blue); color: #0c0f16; border: 1px solid var(--blue); }
+.modal-btn.primary:hover { filter: brightness(1.08); }
 </style>
 </head>
 <body>
@@ -768,6 +874,34 @@ kbd {
   <div class="fo-hint">Fist again to exit · press F</div>
 </div>
 
+<!-- ADD TASK MODAL -->
+<div id="add-modal" class="modal-overlay" onclick="if(event.target===this)closeAddModal()">
+  <div class="modal-card">
+    <div class="modal-eyebrow">New task</div>
+    <div class="modal-title">Pick a template</div>
+    <div class="modal-templates" id="modal-templates"></div>
+    <div class="modal-divider"></div>
+    <div class="modal-form">
+      <label class="modal-label">Name</label>
+      <input id="modal-name" type="text" class="modal-input" placeholder="e.g. Roadmap review" />
+      <label class="modal-label">Priority</label>
+      <div class="modal-priority" id="modal-priority">
+        <button data-col="urgent" class="mp-btn">Urgent</button>
+        <button data-col="important" class="mp-btn active">Important</button>
+        <button data-col="later" class="mp-btn">Later</button>
+      </div>
+      <label class="modal-label">Tag</label>
+      <input id="modal-tag" type="text" class="modal-input" placeholder="Focus" />
+      <label class="modal-label">Notes</label>
+      <textarea id="modal-desc" class="modal-input" rows="2" placeholder="What does done look like?"></textarea>
+    </div>
+    <div class="modal-actions">
+      <button class="modal-btn ghost" onclick="closeAddModal()">Cancel</button>
+      <button class="modal-btn primary" onclick="submitAddModal()">Add task</button>
+    </div>
+  </div>
+</div>
+
 <!-- TOAST -->
 <div id="toast"></div>
 
@@ -823,15 +957,75 @@ S.nextId = S.tasks.reduce((m, t) => Math.max(m, t.id), 0) + 1;
 /* ─────────────────────────────────────────
    ADD / DELETE
 ───────────────────────────────────────── */
-function addTaskPrompt() {
-  const name = prompt('Task name?');
-  if (!name || !name.trim()) return;
-  const colInput = (prompt('Priority? (u = urgent, i = important, l = later)', 'i') || 'i').trim().toLowerCase()[0];
-  const col = colInput === 'u' ? 'urgent' : colInput === 'l' ? 'later' : 'important';
-  S.tasks.push({ id: S.nextId++, name: name.trim(), col, tag: 'New', desc: 'Click to add details.', done: false });
+/* Templates — most-used PM/creator workflows */
+const TEMPLATES = [
+  { key:'deep',     emoji:'🎯', label:'Deep Work', name:'Deep Work 45m',   col:'important', tag:'Focus',   desc:'Distraction-free · one clear deliverable · 45 min block' },
+  { key:'meeting',  emoji:'📅', label:'Meeting',   name:'Sync meeting',    col:'urgent',    tag:'Sync',    desc:'Agenda · notes · action items captured · follow-up sent' },
+  { key:'content',  emoji:'✍️', label:'Content',   name:'Edit & Upload',   col:'later',     tag:'Content', desc:'Final cut · captions · cover art · schedule post' },
+  { key:'routine',  emoji:'☀️', label:'Routine',   name:'Morning Reset',   col:'urgent',    tag:'Routine', desc:'Journal 5 min · Hydrate · Set intention for the day' },
+  { key:'quick',    emoji:'⚡', label:'Quick',     name:'Quick task',      col:'important', tag:'Quick',   desc:'Under 15 min · do it now · no meeting needed' },
+];
+
+function addTaskPrompt() { openAddModal(); }
+
+function openAddModal() {
+  const overlay = document.getElementById('add-modal');
+  const tplWrap = document.getElementById('modal-templates');
+  tplWrap.innerHTML = TEMPLATES.map(t =>
+    `<div class="mt-tile" data-key="${t.key}"><div class="mt-emoji">${t.emoji}</div><div class="mt-label">${t.label}</div></div>`
+  ).join('');
+  tplWrap.querySelectorAll('.mt-tile').forEach(tile => {
+    tile.addEventListener('click', () => {
+      tplWrap.querySelectorAll('.mt-tile').forEach(t => t.classList.remove('active'));
+      tile.classList.add('active');
+      applyTemplate(tile.dataset.key);
+    });
+  });
+
+  // Priority button group
+  document.querySelectorAll('#modal-priority .mp-btn').forEach(btn => {
+    btn.onclick = () => {
+      document.querySelectorAll('#modal-priority .mp-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+    };
+  });
+
+  // Default state — pre-select first template (Deep Work)
+  const firstTile = tplWrap.querySelector('.mt-tile');
+  if (firstTile) { firstTile.classList.add('active'); applyTemplate(TEMPLATES[0].key); }
+
+  overlay.classList.add('show');
+  setTimeout(() => document.getElementById('modal-name').focus(), 80);
+}
+
+function applyTemplate(key) {
+  const t = TEMPLATES.find(x => x.key === key);
+  if (!t) return;
+  document.getElementById('modal-name').value = t.name;
+  document.getElementById('modal-tag').value  = t.tag;
+  document.getElementById('modal-desc').value = t.desc;
+  document.querySelectorAll('#modal-priority .mp-btn').forEach(b => {
+    b.classList.toggle('active', b.dataset.col === t.col);
+  });
+}
+
+function closeAddModal() {
+  document.getElementById('add-modal').classList.remove('show');
+}
+
+function submitAddModal() {
+  const name = document.getElementById('modal-name').value.trim();
+  if (!name) { toast('Name required'); return; }
+  const tag  = document.getElementById('modal-tag').value.trim() || 'Task';
+  const desc = document.getElementById('modal-desc').value.trim() || 'Click to add details.';
+  const colBtn = document.querySelector('#modal-priority .mp-btn.active');
+  const col  = colBtn ? colBtn.dataset.col : 'important';
+
+  S.tasks.push({ id: S.nextId++, name, col, tag, desc, done: false });
   if (!S.boardOpen) S.boardOpen = true;
   saveTasks();
-  toast(`Added: ${name.trim()}`);
+  toast(`Added: ${name}`);
+  closeAddModal();
   render();
 }
 
@@ -1236,7 +1430,10 @@ async function initCamera() {
    KEYBOARD FALLBACK
 ───────────────────────────────────────── */
 document.addEventListener('keydown', e => {
-  if (e.target.tagName === 'INPUT') return;
+  if (e.key === 'Escape' && document.getElementById('add-modal').classList.contains('show')) {
+    closeAddModal(); return;
+  }
+  if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
   switch (e.key.toUpperCase()) {
     case 'O':           toggleBoard();       break;
     case 'F':           toggleFocus();       break;
